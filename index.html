@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earthworm Animation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #2c1810, #1a0f08);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+            touch-action: none;
+        }
+        
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #8b6f47;
+            font-size: 14px;
+            opacity: 0.7;
+            z-index: 100;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+            z-index: 100;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .control-group label {
+            color: #8b6f47;
+            font-size: 12px;
+            margin-bottom: 3px;
+        }
+        
+        .slider {
+            width: 100px;
+            height: 6px;
+            background: #3a2518;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #8b6f47;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #8b6f47;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .button {
+            padding: 8px 16px;
+            background: #8b6f47;
+            color: #1a0f08;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        
+        .button:hover {
+            background: #a68456;
+        }
+        
+        .button:active {
+            background: #6d5537;
+        }
+        
+        @media (max-width: 768px) {
+            #info {
+                font-size: 12px;
+                top: 10px;
+                left: 10px;
+            }
+            
+            #controls {
+                bottom: 10px;
+                left: 10px;
+                right: 10px;
+                gap: 10px;
+            }
+            
+            .slider {
+                width: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="info">🪱 Earthworm Explorer</div>
+    
+    <div id="controls">
+        <div class="control-group">
+            <label for="speedSlider">Speed</label>
+            <input type="range" id="speedSlider" class="slider" min="0.1" max="3" step="0.1" value="1">
+        </div>
+        
+        <div class="control-group">
+            <label for="disturbanceSlider">Disturbance</label>
+            <input type="range" id="disturbanceSlider" class="slider" min="0" max="3" step="0.1" value="1">
+        </div>
+        
+        <button class="button" onclick="createSoilDisturbance()">Disturb Soil</button>
+        <button class="button" onclick="resetAnimation()">Reset</button>
+    </div>
+    
+    <script>
+        let t = 0;
+        let worm;
+        let canvasWidth, canvasHeight;
+        let isMobile = false;
+        let particles = [];
+        let maxParticles;
+        let wormSpeed = 1;
+        let disturbanceLevel = 1;
+        let disturbanceFields = [];
+        let maxDisturbanceFields = 5;
+        
+        function setup() {
+            // Detect mobile device
+            isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+            
+            // Responsive canvas sizing
+            canvasWidth = min(windowWidth, windowHeight * 0.8);
+            canvasHeight = min(windowHeight, windowWidth * 0.8);
+            
+            // Mobile optimization
+            if (isMobile) {
+                canvasWidth = min(windowWidth * 0.95, 400);
+                canvasHeight = min(windowHeight * 0.8, 400);
+                maxParticles = 3000; // Reduced for mobile
+            } else {
+                maxParticles = 6000; // Desktop
+            }
+            
+            createCanvas(canvasWidth, canvasHeight);
+            
+            // Initialize single worm
+            worm = {
+                offset: 0,
+                size: 1.5, // Increased size
+                speed: 1,
+                color: {
+                    r: 200,
+                    g: 140,
+                    b: 100
+                }
+            };
+            
+            // Setup control listeners
+            setupControls();
+        }
+        
+        function draw() {
+            // Dynamic background with subtle gradient
+            background(15, 10, 8);
+            
+            // Add soil texture effect
+            drawSoilTexture();
+            
+            // Update time with controllable speed
+            t += (PI / (isMobile ? 180 : 120)) * wormSpeed;
+            
+            // Update disturbance fields
+            updateDisturbanceFields();
+            
+            // Clear old particles for performance
+            particles = particles.slice(-maxParticles);
+            
+            // Draw the worm
+            drawWorm(worm);
+            
+            // Draw trailing particles
+            drawParticles();
+        }
+        
+        function drawWorm(worm) {
+            let segments = isMobile ? 40 : 60; // Reduced segments for shorter worm
+            let baseRadius = (canvasWidth / 60) * worm.size; // Increased base radius for thickness
+            
+            // Create worm body segments
+            for (let i = 0; i < segments; i++) {
+                let progress = i / segments;
+                let segmentTime = t * worm.speed + worm.offset;
+                
+                // Base worm movement equations
+                let baseX = canvasWidth/2 + 
+                           cos(segmentTime + progress * 4) * (canvasWidth/4) * (1 - progress * 0.3) +
+                           cos(segmentTime * 2 + progress * 6) * (canvasWidth/8) * progress +
+                           sin(segmentTime * 0.5 + progress * 2) * (canvasWidth/12);
+                
+                let baseY = canvasHeight/2 + 
+                           sin(segmentTime + progress * 4) * (canvasHeight/4) * (1 - progress * 0.3) +
+                           sin(segmentTime * 1.5 + progress * 5) * (canvasHeight/8) * progress +
+                           cos(segmentTime * 0.7 + progress * 3) * (canvasHeight/12);
+                
+                // Apply disturbance field influence
+                let disturbanceInfluence = calculateDisturbanceInfluence(baseX, baseY, progress);
+                
+                let x = baseX + disturbanceInfluence.x;
+                let y = baseY + disturbanceInfluence.y;
+                
+                // Underground tunneling effect
+                let depth = sin(segmentTime + progress * 3) * 0.3 + 0.7;
+                let segmentRadius = baseRadius * (1 - progress * 0.3) * depth; // Less tapering for thicker worm
+                
+                // Color variation along worm body
+                let colorFactor = (sin(progress * PI * 2 + segmentTime) + 1) * 0.5;
+                let r = worm.color.r + colorFactor * 30;
+                let g = worm.color.g + colorFactor * 20;
+                let b = worm.color.b + colorFactor * 15;
+                let alpha = depth * 180 + 75;
+                
+                // Draw worm segment
+                fill(r, g, b, alpha);
+                noStroke();
+                ellipse(x, y, segmentRadius * 2, segmentRadius * 2);
+                
+                // Add segmentation rings
+                if (i % 6 === 0) { // More frequent rings for shorter worm
+                    stroke(r - 40, g - 30, b - 20, alpha * 0.8);
+                    strokeWeight(1.5);
+                    noFill();
+                    ellipse(x, y, segmentRadius * 2.2, segmentRadius * 2.2);
+                }
+                
+                // Add particles for soil displacement
+                if (frameCount % 3 === 0 && random() < 0.3 * disturbanceLevel) {
+                    particles.push({
+                        x: x + random(-segmentRadius, segmentRadius),
+                        y: y + random(-segmentRadius, segmentRadius),
+                        vx: random(-1, 1) * disturbanceLevel,
+                        vy: random(-1, 1) * disturbanceLevel,
+                        life: 60,
+                        maxLife: 60,
+                        size: random(2, 4)
+                    });
+                }
+            }
+        }
+        
+        function drawSoilTexture() {
+            // Subtle soil particle background
+            for (let i = 0; i < (isMobile ? 50 : 100); i++) {
+                let x = random(canvasWidth);
+                let y = random(canvasHeight);
+                let size = random(1, 3);
+                let alpha = random(10, 30);
+                
+                fill(101, 67, 33, alpha);
+                noStroke();
+                ellipse(x, y, size, size);
+            }
+        }
+        
+        function drawParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                
+                // Update particle
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                p.vy += 0.05; // Gravity
+                
+                // Draw particle
+                let alpha = (p.life / p.maxLife) * 100;
+                fill(139, 111, 71, alpha);
+                noStroke();
+                ellipse(p.x, p.y, p.size, p.size);
+                
+                // Remove dead particles
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+        
+        function windowResized() {
+            // Responsive resize
+            if (isMobile) {
+                canvasWidth = min(windowWidth * 0.95, 400);
+                canvasHeight = min(windowHeight * 0.8, 400);
+            } else {
+                canvasWidth = min(windowWidth, windowHeight * 0.8);
+                canvasHeight = min(windowHeight, windowWidth * 0.8);
+            }
+            resizeCanvas(canvasWidth, canvasHeight);
+        }
+        
+        // Touch interaction for mobile
+        function touchStarted() {
+            // Add disturbance effect
+            createSoilDisturbanceAt(mouseX, mouseY);
+            return false; // Prevent default touch behavior
+        }
+        
+        // Mouse interaction for desktop
+        function mousePressed() {
+            touchStarted();
+        }
+        
+        // Control functions
+        function setupControls() {
+            document.getElementById('speedSlider').addEventListener('input', function(e) {
+                wormSpeed = parseFloat(e.target.value);
+            });
+            
+            document.getElementById('disturbanceSlider').addEventListener('input', function(e) {
+                disturbanceLevel = parseFloat(e.target.value);
+            });
+        }
+        
+        function createSoilDisturbance() {
+            // Create disturbance at random location
+            let x = random(canvasWidth * 0.2, canvasWidth * 0.8);
+            let y = random(canvasHeight * 0.2, canvasHeight * 0.8);
+            createSoilDisturbanceAt(x, y);
+        }
+        
+        function createSoilDisturbanceAt(x, y) {
+            let particleCount = 30 * disturbanceLevel;
+            for (let i = 0; i < particleCount; i++) {
+                particles.push({
+                    x: x + random(-40, 40),
+                    y: y + random(-40, 40),
+                    vx: random(-4, 4) * disturbanceLevel,
+                    vy: random(-4, 4) * disturbanceLevel,
+                    life: random(40, 80),
+                    maxLife: random(40, 80),
+                    size: random(2, 6)
+                });
+            }
+            
+            // Add disturbance field that affects worm movement
+            disturbanceFields.push({
+                x: x,
+                y: y,
+                strength: 50 * disturbanceLevel,
+                radius: 80 + (disturbanceLevel * 20),
+                life: 300, // How long the disturbance affects the worm
+                maxLife: 300
+            });
+            
+            // Limit number of disturbance fields
+            if (disturbanceFields.length > maxDisturbanceFields) {
+                disturbanceFields.shift();
+            }
+        }
+        
+        function updateDisturbanceFields() {
+            // Update and remove expired disturbance fields
+            for (let i = disturbanceFields.length - 1; i >= 0; i--) {
+                disturbanceFields[i].life--;
+                if (disturbanceFields[i].life <= 0) {
+                    disturbanceFields.splice(i, 1);
+                }
+            }
+        }
+        
+        function calculateDisturbanceInfluence(x, y, progress) {
+            let totalInfluenceX = 0;
+            let totalInfluenceY = 0;
+            
+            for (let field of disturbanceFields) {
+                let distance = dist(x, y, field.x, field.y);
+                
+                if (distance < field.radius) {
+                    // Calculate influence based on distance and field strength
+                    let influence = (1 - distance / field.radius) * field.strength;
+                    
+                    // Age factor - newer disturbances have more effect
+                    let ageFactor = field.life / field.maxLife;
+                    influence *= ageFactor;
+                    
+                    // Segment factor - head segments are more responsive
+                    let segmentFactor = 1 - progress * 0.7;
+                    influence *= segmentFactor;
+                    
+                    // Calculate direction away from disturbance
+                    let angle = atan2(y - field.y, x - field.x);
+                    
+                    // Add some randomness and oscillation
+                    angle += sin(frameCount * 0.1 + progress * 5) * 0.3;
+                    
+                    totalInfluenceX += cos(angle) * influence * 0.02;
+                    totalInfluenceY += sin(angle) * influence * 0.02;
+                }
+            }
+            
+            return {
+                x: totalInfluenceX,
+                y: totalInfluenceY
+            };
+        }
+        
+        function resetAnimation() {
+            // Reset time and clear particles
+            t = 0;
+            particles = [];
+            disturbanceFields = [];
+            
+            // Reset controls
+            document.getElementById('speedSlider').value = 1;
+            document.getElementById('disturbanceSlider').value = 1;
+            wormSpeed = 1;
+            disturbanceLevel = 1;
+        }
+    </script>
+</body>
+</html>
